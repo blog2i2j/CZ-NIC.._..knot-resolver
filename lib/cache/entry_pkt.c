@@ -18,6 +18,17 @@
 KR_EXPORT
 uint32_t packet_ttl(const knot_pkt_t *pkt)
 {
+	// Return 0 for error packets.
+	// TODO: overall design around caching SERVFAIL-inducing situations.
+	switch (knot_wire_get_rcode(pkt->wire)) {
+	case KNOT_RCODE_NOERROR:
+	case KNOT_RCODE_NXDOMAIN:
+	case KNOT_RCODE_YXDOMAIN:
+		break;
+	default:
+		return 0;
+	}
+
 	bool has_ttl = false;
 	uint32_t ttl = TTL_MAX_MAX;
 	for (knot_section_t i = KNOT_ANSWER; i <= KNOT_ADDITIONAL; ++i) {
