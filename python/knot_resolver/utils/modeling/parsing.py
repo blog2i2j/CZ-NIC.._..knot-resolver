@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, Hashable, List, Union
 import yaml
 from yaml.constructor import ConstructorError
 
-from knot_resolver.utils.modeling.errors import DataParsingError, DataReadingError
+from knot_resolver.utils.modeling.errors import DataParsingError, DataReadingError, DataTypeError
 
 if TYPE_CHECKING:
     from yaml.nodes import MappingNode
@@ -97,6 +97,45 @@ def _json_raise_duplicates(pairs: list[tuple[str, ParsedData]]) -> dict[str, Par
     return mapping
 
 
+def _include_key_root(parsed_data: ParsedDataWrapper) -> ParsedDataWrapper:
+    data = parsed_data.data
+    base_path = parsed_data.file.parent
+
+    if isinstance(data, ParsedDataWrapper):
+        parsed_data.data = _include_key_root(data)
+
+    elif isinstance(data, dict) and _YAML_INCLUDE_KEY in data:
+        files = data[_YAML_INCLUDE_KEY]
+        parsed_files: list[ParsedData] = []
+
+        if isinstance(files, str):
+            file_path = Path(files)
+            if not file_path.is_absolute():
+                file_path = base_path / file_path
+            parsed_files.append(try_to_parse_file(file_path))
+
+        elif isinstance(files, list):
+            for file in files:
+                if isinstance(file, str):
+                    file_path = Path(file)
+                    if not file_path.is_absolute():
+                        file_path = base_path / file_path
+                    parsed_files.append(try_to_parse_file(file_path))
+                else:
+                    msg = ""
+                    pointer = f"{parsed_data.file}:/{_YAML_INCLUDE_KEY}"
+                    raise DataTypeError(msg, pointer)
+
+        else:
+            msg = f"expected string or list, got {type(files)}"
+            pointer = f"{parsed_data.file}:/{_YAML_INCLUDE_KEY}"
+            raise DataTypeError(msg, pointer)
+
+        data[_YAML_INCLUDE_KEY] = parsed_files
+
+    return parsed_data
+
+
 class DataFormat(Enum):
     YAML = auto()
     JSON = auto()
@@ -139,14 +178,14 @@ def parse_json_str(data: str) -> ParsedData:
 
 def parse_json_file(file: str | Path) -> ParsedDataWrapper:
     """Read the JSON file, parse its data string, and return its parsed(dict) data."""
-    data = DataFormat.YAML.load_file(file)
+    data = DataFormat.JSON.load_file(file)
     return ParsedDataWrapper(data, file)
 
 
 def parse_yaml_file(file: str | Path) -> ParsedDataWrapper:
     """Read the YAML file, parse its data string, and return its parsed(dict) data."""
     data = DataFormat.YAML.load_file(file)
-    return ParsedDataWrapper(data, file)
+    return _include_key_root(ParsedDataWrapper(data, file))
 
 
 def try_to_parse_file(file: str | Path) -> ParsedDataWrapper:
