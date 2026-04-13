@@ -3,6 +3,7 @@
 test_user="testuser"
 src_path="$(realpath "$0")"
 src_dir="$(dirname "$src_path")"
+git_root="$(git rev-parse --show-toplevel)"
 
 test_dir="tests/python/knot_resolver"
 ignore="$test_dir/utils/modeling/types/path_testing"
@@ -18,7 +19,7 @@ if [ -z "${SWITCHED_USER:-}" ]; then
       # only works on Debian
       adduser --disabled-password --gecos "" "$test_user"
     fi
-    chown -R $test_user:$test_user $test_dir/utils/modeling/types/prepare_path_testing
+    chown -R $test_user:$test_user $git_root
     exec su -m "$test_user" -c "SWITCHED_USER=1 $0"
   fi
 fi
